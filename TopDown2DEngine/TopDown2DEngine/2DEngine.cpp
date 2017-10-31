@@ -31,14 +31,15 @@ int lastDirPress;
 enum mapObject { 
 	MAP_FLOOR = ' ',
 	MAP_CHEST = 0x25A1,			// 0x25A1 = □
-	MAP_CHARACTER = 0x263A,		// 0x263A = ☺
+	MAP_CHARACTER = 0x263B,		// 0x263B = ☻
+	MAP_ENEMY = 0x263A,			// 0x263A = ☺
 	MAP_SPAWNPLAYER = 0x25CA,	// 0x25CA = ◊
 	MAP_PORTAL1 = 0x25D9,		// 0x25D9 = ◙
 	MAP_PORTAL2 = 0x25D8,		// 0x25D8 = ◘
 	MAP_PORTAL3 = 0x25CF,		// 0x25CF = ●
 	MAP_PORTALNEXT = 0x263C,	// 0x263C = ☼
 	MAP_KEY = 0x25E6,			// 0x25E6 = ◦
-	MAP_PICKUP = 0x25AB,			// 0x25AB =	▫
+	MAP_PICKUP = 0x25AB,		// 0x25AB =	▫
 	MAP_LOCKED_DOOR = 0x25AC	// 0x25AC = ▬
 };
 
@@ -63,6 +64,8 @@ enum mapFile {
 };
 
 char * mapFileName[3] = { "gameMapE1M1.txt","gameMapE1M2.txt", "gameMapE1M3.txt" };
+long characterSpeed = 50;
+__int64 characterNextMove = characterSpeed;
 
 const int WIDTH = 100;
 const int HEIGHT = 100;
@@ -77,39 +80,58 @@ bool Attacked = false, continuePlaying = true;
 random_device random;
 __int64 currentFrameTime, nextFrameTime;
 
+void Attack(bool);
+void changeColor(WORD,int,int);
 void clearScreen();
 void clearBox();
+void DetectOldPosition();
 void DrawScreen();
 bool FrameRate(int);
-void VKControl();
-void Control();
+void HitCollision(bool, int, int, wchar_t);
 int KeyCheck();
-void SpwanPlayer();
 void LoadMap(int);
 void MoveCharacter(int, int);
-void DetectOldPosition();
 void ShowConsoleCursor(bool);
-void Attack(bool);
-void HitCollision(bool, int, int, wchar_t);
-void changeColor(WORD,int,int);
+void SpwanPlayer();
+void VKControl();
+
+// Font
+CONSOLE_FONT_INFOEX cfi;
+// Windows Size
+
+int columns, rows;
 
 void main()
 {
+	
+	// Font Size
+	cfi.cbSize = sizeof(cfi);
+	cfi.dwFontSize.X = 0;
+	cfi.dwFontSize.Y = 28;
+	SetCurrentConsoleFontEx(GetStdHandle(STD_OUTPUT_HANDLE), FALSE, &cfi);
+	// Full screen
+	SetConsoleDisplayMode(GetStdHandle(STD_OUTPUT_HANDLE), CONSOLE_FULLSCREEN_MODE, 0);
+	CONSOLE_SCREEN_BUFFER_INFO csbi;
+	GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+	columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+	rows = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+
 	_setmode(_fileno(stdout), _O_WTEXT);
-	ShowConsoleCursor(false);
+	
 	LoadMap(E1M1);
 	currentLevel = 0;
 	SpwanPlayer();
 
 	do
 	{
-		if (FrameRate(5))
+		
+		if (FrameRate(30))
 		{
+			ShowConsoleCursor(false);
 			VKControl();
 			DrawScreen();	
 		}
 	
-		//Control();
 	} while (continuePlaying == true);
 }
 
@@ -124,6 +146,7 @@ void clearScreen()
 	Position.X = 0;
 	Position.Y = 0;
 	SetConsoleCursorPosition(hOut, Position);
+	
 }
 
 void clearBox()
@@ -139,6 +162,14 @@ void clearBox()
 	FillConsoleOutputCharacter(hOut, ' ', 1000000, Position, &Written);
 
 	SetConsoleCursorPosition(hOut, Position);
+	
+	for (int i = 0; i < HEIGHT; i++)
+	{
+		for (int j = 0; j < WIDTH; j++)
+		{
+			changeColor(15, j, i);
+		}
+	}
 }
 bool FrameRate(int rate)
 {
@@ -162,6 +193,15 @@ void VKControl()
 	{
 		lastDirPress = UP;
 		MoveCharacter(0, -1);
+	}
+
+	if (GetAsyncKeyState(VK_SHIFT))
+	{
+		characterSpeed = 50;
+	}
+	else
+	{
+		characterSpeed = 150;
 	}
 
 	if (GetAsyncKeyState(VKKEY_DOWN) || GetAsyncKeyState(VKKEY_S))
@@ -193,85 +233,92 @@ void VKControl()
 	}
 }
 
-void Control()
-{
-	switch (KeyCheck())
-	{
-	case KEY_UP:
-	case KEY_W:
-		lastDirPress = UP;
-		MoveCharacter(0, -1);
-		break;
-	case KEY_DOWN:
-	case KEY_S:
-		lastDirPress = DOWN;
-		MoveCharacter(0, 1);
-		break;
-	case KEY_LEFT:
-	case KEY_A:
-		lastDirPress = LEFT;
-		MoveCharacter(-1, 0);
-		break;
-	case KEY_RIGHT:
-	case KEY_D:
-		lastDirPress = RIGHT;
-		MoveCharacter(1, 0);
-		break;
-	case KEY_SPACE:
-		Attack(true);
-		break;
-	case KEY_F:
-		break;
-	case KEY_ESC:
-		return;
-		break;
-	default:
-
-		break;
-	}
-}
 
 void DrawScreen()
 {
+			
 	//system("cls");
 	clearScreen();
+	HANDLE hOut;
+	COORD Position;
+	DWORD Written;
+	hOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	
+	int locX, locY;
 	for (int i = 0; i < mapH; i++)
 	{
 		for (int j = 0; j < mapW; j++)
-		{
-			wcout << position[i][j];
+		{		
+			locX = j + ((columns / 2) - (mapW / 2)) + 1 /*- character[1] + (mapW / 2)*/;	// uncomment to move map around character
+			locY = i + 10 /*- character[0] + (mapH / 2)*/;	// uncomment to move map around character
+			Position.X = locX;
+			Position.Y = locY;
+			FillConsoleOutputCharacter(hOut, position[i][j], 1, Position, &Written);
+			//wcout << position[i][j];
+
 			// Apply colors
 			switch (position[i][j])
 			{
 			case MAP_KEY:
 			case MAP_LOCKED_DOOR:
-				changeColor(140, j, i);
+				changeColor(140, locY, locX);
 				break;
 			case MAP_PICKUP:
 			case MAP_CHEST:
-				changeColor(138, j, i);
+				changeColor(138, locY, locX);
 				break;
 			case MAP_CHARACTER:
-				changeColor(142, j, i);
+				changeColor(142, locY, locX);
+				break;
+			case MAP_ENEMY:
+				changeColor(137, locY, locX);
 				break;
 			case MAP_PORTALNEXT:
-				changeColor(133, j, i);
+				changeColor(133, locY, locX);
 				break;
 			case SWORD_UP: 		
 			case SWORD_DOWN:
 			case SWORD_LEFT:
 			case SWORD_RIGHT:
-				changeColor(135, j, i);
+				changeColor(135, locY, locX);
 				break;
 			default:
-				changeColor(143, j, i);
+				changeColor(143, locY, locX);
 				break;
-			}			
+			}
+			if (i == 0)
+			{
+				Position.X = locX;
+				Position.Y = locY - 1;
+				FillConsoleOutputCharacter(hOut, ' ', 1, Position, &Written);
+				changeColor(15, locY-1, locX);
+			}
+			if (i == mapH - 1)
+			{
+				Position.X = locX;
+				Position.Y = locY + 1;
+				FillConsoleOutputCharacter(hOut, ' ', 1, Position, &Written);
+				changeColor(15, locY+1, locX);
+			}
+			if (j == 0)
+			{
+				Position.Y = locY;
+				Position.X = locX-1;
+				FillConsoleOutputCharacter(hOut, ' ', 1, Position, &Written);
+				changeColor(15, locY, locX-1);
+			}
+			if (j == mapW - 1)
+			{
+				Position.Y = locY;
+				Position.X = locX +1;
+				FillConsoleOutputCharacter(hOut, ' ', 1, Position, &Written);
+				changeColor(15, locY, locX + 1);
+			}
 		}
-		wcout << endl;
+		//wcout << endl;
 	}
 	wcout << "Gather: " << gatheredItem << "\tKey(s): " << keysGathered << endl;
+	wcout << "Colums: " << columns << "\tCenter: " << ((columns / 2) + (mapW / 2)) + 1 << endl;
 
 	//Attack(false);
 	if (Attacked)
@@ -279,27 +326,14 @@ void DrawScreen()
 		Attack(false);
 	}
 
-	/*HANDLE hOut;
-	COORD Position;
-	DWORD Written;
-
-	hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-
-	Position.X = 11;
-	Position.Y = 11;
-	FillConsoleOutputCharacter(hOut, 'D', 1, Position, &Written);
-	Position.X = 12;
-	Position.Y = 11;
-	FillConsoleOutputCharacter(hOut, 'D', 1, Position, &Written);*/
 }
 
-void changeColor(WORD colorSelected, int posX, int poxY)
+void changeColor(WORD colorSelected, int poxY, int posX)
 {
 	WORD write = colorSelected;
 	COORD c = { posX, poxY };
 	DWORD written;
 	WriteConsoleOutputAttribute(GetStdHandle(STD_OUTPUT_HANDLE), &write, 1, c, &written);
-
 }
 
 int KeyCheck()
@@ -383,11 +417,17 @@ void LoadMap(int fileName)
 		cout << "Unable to open file!" << endl;
 		system("pause");
 	}
-
+	//SetWindowPos(GetConsoleWindow(), 0, 0, 0, mapW*25, (mapH+2)*25, SWP_SHOWWINDOW | SWP_NOMOVE);
 }
 
 void MoveCharacter(int y, int x)
 {
+	if (currentFrameTime <= characterNextMove)
+	{
+		return;
+	}
+	characterNextMove = currentFrameTime + characterSpeed;
+
 	wchar_t futurePosition = position[character[0] + x][character[1] + y];
 	switch (futurePosition)
 	{
