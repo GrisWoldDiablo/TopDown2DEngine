@@ -3,25 +3,26 @@
 #include <string>
 #include <random>
 #include <stdio.h>
-#include <io.h>    // for _setmode()
-#include <fcntl.h> // for _O_U16TEXT
+//#include <io.h>    // for _setmode()
+//#include <fcntl.h> // for _O_U16TEXT
 #include <conio.h>
 #include <Windows.h>
 #include <chrono>
+#include <fstream>
 
 using namespace std;
 using namespace std::chrono;
 
-enum keyCode {
-	KEY_UP = 72, KEY_DOWN = 80, KEY_LEFT = 75, KEY_RIGHT = 77,
-	KEY_W = 119, KEY_S = 115, KEY_A = 97, KEY_D = 100,
-	KEY_SPACE = 32, KEY_F = 102, KEY_ESC = 27
-};
+//enum keyCode {
+//	KEY_UP = 72, KEY_DOWN = 80, KEY_LEFT = 75, KEY_RIGHT = 77,
+//	KEY_W = 119, KEY_S = 115, KEY_A = 97, KEY_D = 100,
+//	KEY_SPACE = 32, KEY_F = 102, KEY_ESC = 27
+//};
 
 
 enum vkKeyCode {
 	VKKEY_UP = VK_UP, VKKEY_DOWN = VK_DOWN, VKKEY_LEFT = VK_LEFT, VKKEY_RIGHT = VK_RIGHT,
-	VKKEY_W = 0x57, VKKEY_S = 0x53, VKKEY_A = 0x41, VKKEY_D = 0x44,
+	VKKEY_W = 0x57, VKKEY_S = 0x53, VKKEY_A = 0x41, VKKEY_D = 0x44, VKKEY_E = 0x45,
 	VKKEY_SPACE = VK_SPACE, VKKEY_F = 102, VKKEY_ESC = VK_ESCAPE
 };
 
@@ -40,7 +41,9 @@ enum mapObject {
 	MAP_PORTALNEXT = 0x263C,	// 0x263C = ☼
 	MAP_KEY = 0x25E6,			// 0x25E6 = ◦
 	MAP_PICKUP = 0x25AB,		// 0x25AB =	▫
-	MAP_LOCKED_DOOR = 0x25AC	// 0x25AC = ▬
+	MAP_LOCKED_DOOR = 0x25AC,	// 0x25AC = ▬
+	MAP_WATER = 0x2592,			// 0x2592 = ▒
+	MAP_DIRT = 0x2591,			// 0x2591 = ░
 };
 
 enum mapCeiling {
@@ -57,22 +60,27 @@ enum attack {
 };
 
 enum mapFile {
-	E1M1 = 0,
-	E1M2 = 1,
-	E1M3 = 2,
-	NEXTLEVEL = -1
+	NEXTLEVEL = -1,
+	E1M0 = 0,
+	E1M1,
+	E1M2,
+	E1M3, 
 };
 
-char * mapFileName[3] = { "gameMapE1M1.txt","gameMapE1M2.txt", "gameMapE1M3.txt" };
+enum mapText{TEXT_ZERO = '0', TEXT_ONE, TEXT_TWO, TEXT_THREE, TEXT_FOUR, TEXT_FIVE, TEXT_SIX, TEXT_SEVEN, TEXT_EIGHT, TEXT_NINE, };
+const int WIDTH = 100;
+const int HEIGHT = 100;
+const int ENGINE_MAX_LEVEL = 100;
+int mapH, mapW, gatheredItem = 0, keysGathered = 0, currentLevel = 0;
+wchar_t position[HEIGHT][WIDTH] = { {},{} };
+
+
+
 long characterSpeed = 50;
 __int64 characterNextMove = characterSpeed;
 
-const int WIDTH = 100;
-const int HEIGHT = 100;
-const int MAX_LEVEL = 3;
-int mapH, mapW, gatheredItem = 0, keysGathered = 0, currentLevel = 0;
-wchar_t position[HEIGHT][WIDTH] = { {},{} };
-int character[2] = { 1,1 };
+
+int character[2] = { 1,1 }; // Coordinate X, Y
 bool keyPosition[HEIGHT][WIDTH] = { {},{} };
 
 bool Attacked = false, continuePlaying = true;
@@ -80,26 +88,40 @@ bool Attacked = false, continuePlaying = true;
 random_device random;
 __int64 currentFrameTime, nextFrameTime;
 
-void Attack(bool);
+void attack(bool);
 void changeColor(WORD,int,int);
 void clearScreen();
 void clearBox();
-void DetectOldPosition();
-void DrawScreen();
-bool FrameRate(int);
-void HitCollision(bool, int, int, wchar_t);
-int KeyCheck();
-void LoadMap(int);
-void MoveCharacter(int, int);
-void ShowConsoleCursor(bool);
-void SpwanPlayer();
-void VKControl();
+void detectOldPosition();
+void drawScreen();
+bool frameRate(int);
+void hitCollision(bool, int, int, wchar_t);
+//int keyCheck();
+bool loadMap(int);
+bool moveCharacter(int, int);
+void showConsoleCursor(bool);
+bool spwanPlayer();
+bool vKControl();
+void displayMessage(string);
+int loadMapText();
+void action();
+bool loadGameInfo(string);
 
 // Font
-CONSOLE_FONT_INFOEX cfi;
+CONSOLE_FONT_INFOEX cfi, test;
 // Windows Size
-
 int columns, rows;
+
+// Load map Text
+string mapFileNameText[ENGINE_MAX_LEVEL] = {}; 
+string mapMessages[10];
+wchar_t mapMessageChar[10];
+int messagePosition[HEIGHT][WIDTH] = { {},{} };
+
+// Game Information
+int gameMaxLevel = 4;
+const string GAME_INFO_TEXT_FILE = "GameInfo.txt";
+string mapFileName[ENGINE_MAX_LEVEL] = {};
 
 void main()
 {
@@ -108,7 +130,11 @@ void main()
 	cfi.cbSize = sizeof(cfi);
 	cfi.dwFontSize.X = 0;
 	cfi.dwFontSize.Y = 28;
+	//lstrcpyW(cfi.FaceName, L"Lucida Console");
+	lstrcpyW(cfi.FaceName, L"Consolas");
 	SetCurrentConsoleFontEx(GetStdHandle(STD_OUTPUT_HANDLE), FALSE, &cfi);
+	GetCurrentConsoleFontEx(GetStdHandle(STD_OUTPUT_HANDLE), FALSE, &test);
+	test.FaceName;
 	// Full screen
 	SetConsoleDisplayMode(GetStdHandle(STD_OUTPUT_HANDLE), CONSOLE_FULLSCREEN_MODE, 0);
 	CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -116,52 +142,60 @@ void main()
 	columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;
 	rows = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
 
-	_setmode(_fileno(stdout), _O_WTEXT);
-	
-	LoadMap(E1M1);
+	//_setmode(_fileno(stdout), _O_WTEXT);
+	if (!loadGameInfo(GAME_INFO_TEXT_FILE))
+	{
+		return;
+	}
+	if (!loadMap(E1M0))
+	{
+		return;
+	}
 	currentLevel = 0;
-	SpwanPlayer();
 
 	do
 	{
-		
-		if (FrameRate(30))
+		if (frameRate(30))
 		{
-			ShowConsoleCursor(false);
-			VKControl();
-			DrawScreen();	
+			showConsoleCursor(false);
+
+			if (!vKControl())
+			{
+				return;
+			}
+			drawScreen();
 		}
-	
 	} while (continuePlaying == true);
+
 }
 
 void clearScreen()
 {
 
 	HANDLE hOut;
-	COORD Position;
+	COORD screenPosition;
 
 	hOut = GetStdHandle(STD_OUTPUT_HANDLE);
 
-	Position.X = 0;
-	Position.Y = 0;
-	SetConsoleCursorPosition(hOut, Position);
+	screenPosition.X = 0;
+	screenPosition.Y = 0;
+	SetConsoleCursorPosition(hOut, screenPosition);
 	
 }
 
 void clearBox()
 {
 	HANDLE hOut;
-	COORD Position;
+	COORD screenPosition;
 	DWORD Written;
 
 	hOut = GetStdHandle(STD_OUTPUT_HANDLE);
 
-	Position.X = 0;
-	Position.Y = 0;
-	FillConsoleOutputCharacter(hOut, ' ', 1000000, Position, &Written);
+	screenPosition.X = 0;
+	screenPosition.Y = 0;
+	FillConsoleOutputCharacter(hOut, ' ', 1000000, screenPosition, &Written);
 
-	SetConsoleCursorPosition(hOut, Position);
+	SetConsoleCursorPosition(hOut, screenPosition);
 	
 	for (int i = 0; i < HEIGHT; i++)
 	{
@@ -171,7 +205,8 @@ void clearBox()
 		}
 	}
 }
-bool FrameRate(int rate)
+
+bool frameRate(int rate)
 {
 	currentFrameTime = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 	
@@ -186,14 +221,19 @@ bool FrameRate(int rate)
 	return false;
 }
 
-void VKControl()
+bool vKControl()
 {
 
 	if (GetAsyncKeyState(VKKEY_UP)|| GetAsyncKeyState(VKKEY_W))
 	{
 		lastDirPress = UP;
-		MoveCharacter(0, -1);
+		if (!moveCharacter(0, -1))
+		{
+			return false;
+		}
 	}
+
+	
 
 	if (GetAsyncKeyState(VK_SHIFT))
 	{
@@ -207,40 +247,57 @@ void VKControl()
 	if (GetAsyncKeyState(VKKEY_DOWN) || GetAsyncKeyState(VKKEY_S))
 	{
 		lastDirPress = DOWN;
-		MoveCharacter(0, 1);
+		if(!moveCharacter(0, 1))
+		{
+		return false;
+		}
 	}
 
 	if (GetAsyncKeyState(VKKEY_LEFT) || GetAsyncKeyState(VKKEY_A))
 	{
 		lastDirPress = LEFT;
-		MoveCharacter(-1, 0);
+		if(!moveCharacter(-1, 0))
+		{
+		return false;
+		}
 	}
 
 	if (GetAsyncKeyState(VKKEY_RIGHT) || GetAsyncKeyState(VKKEY_D))
 	{
 		lastDirPress = RIGHT;
-		MoveCharacter(1, 0);
+		if(!moveCharacter(1, 0))
+		{
+		return false;
+		}
 	}
 
 	if (GetAsyncKeyState(VKKEY_SPACE))
 	{
-		Attack(true);
+		attack(true);
+	}
+
+	if (GetAsyncKeyState(VKKEY_E))
+	{
+		action();
+		//displayMessage("THIS IS WORKING FINE");
 	}
 
 	if (GetAsyncKeyState(VKKEY_ESC))
 	{
 		continuePlaying = false;
 	}
+
+
+	return true;
 }
 
-
-void DrawScreen()
+void drawScreen()
 {
 			
 	//system("cls");
 	clearScreen();
 	HANDLE hOut;
-	COORD Position;
+	COORD screenPosition;
 	DWORD Written;
 	hOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	
@@ -250,10 +307,10 @@ void DrawScreen()
 		for (int j = 0; j < mapW; j++)
 		{		
 			locX = j + ((columns / 2) - (mapW / 2)) + 1 /*- character[1] + (mapW / 2)*/;	// uncomment to move map around character
-			locY = i + 10 /*- character[0] + (mapH / 2)*/;	// uncomment to move map around character
-			Position.X = locX;
-			Position.Y = locY;
-			FillConsoleOutputCharacter(hOut, position[i][j], 1, Position, &Written);
+			locY = i + ((rows / 2) - (mapH / 2)) /*- character[0] + (mapH / 2)*/;	// uncomment to move map around character
+			screenPosition.X = locX;
+			screenPosition.Y = locY;
+			FillConsoleOutputCharacter(hOut, position[i][j], 1, screenPosition, &Written);
 			//wcout << position[i][j];
 
 			// Apply colors
@@ -282,48 +339,55 @@ void DrawScreen()
 			case SWORD_RIGHT:
 				changeColor(135, locY, locX);
 				break;
+			case MAP_WATER:
+				changeColor(25, locY, locX);
+				break;
+			case MAP_DIRT:
+				changeColor(4, locY, locX);
+				break;
 			default:
 				changeColor(143, locY, locX);
 				break;
 			}
 			if (i == 0)
 			{
-				Position.X = locX;
-				Position.Y = locY - 1;
-				FillConsoleOutputCharacter(hOut, ' ', 1, Position, &Written);
+				screenPosition.X = locX;
+				screenPosition.Y = locY - 1;
+				FillConsoleOutputCharacter(hOut, ' ', 1, screenPosition, &Written);
 				changeColor(15, locY-1, locX);
 			}
 			if (i == mapH - 1)
 			{
-				Position.X = locX;
-				Position.Y = locY + 1;
-				FillConsoleOutputCharacter(hOut, ' ', 1, Position, &Written);
+				screenPosition.X = locX;
+				screenPosition.Y = locY + 1;
+				FillConsoleOutputCharacter(hOut, ' ', 1, screenPosition, &Written);
 				changeColor(15, locY+1, locX);
 			}
 			if (j == 0)
 			{
-				Position.Y = locY;
-				Position.X = locX-1;
-				FillConsoleOutputCharacter(hOut, ' ', 1, Position, &Written);
+				screenPosition.Y = locY;
+				screenPosition.X = locX-1;
+				FillConsoleOutputCharacter(hOut, ' ', 1, screenPosition, &Written);
 				changeColor(15, locY, locX-1);
 			}
 			if (j == mapW - 1)
 			{
-				Position.Y = locY;
-				Position.X = locX +1;
-				FillConsoleOutputCharacter(hOut, ' ', 1, Position, &Written);
+				screenPosition.Y = locY;
+				screenPosition.X = locX +1;
+				FillConsoleOutputCharacter(hOut, ' ', 1, screenPosition, &Written);
 				changeColor(15, locY, locX + 1);
 			}
 		}
 		//wcout << endl;
 	}
-	wcout << "Gather: " << gatheredItem << "\tKey(s): " << keysGathered << endl;
-	wcout << "Colums: " << columns << "\tCenter: " << ((columns / 2) + (mapW / 2)) + 1 << endl;
-
-	//Attack(false);
+	cout << "Level: " << currentLevel << endl;
+	cout << "Gather: " << gatheredItem << "\tKey(s): " << keysGathered << endl;
+	cout << "Colums: " << columns << "\tCenter: " << ((columns / 2) + (mapW / 2)) + 1 << endl;
+	cout << "Rows: " << rows << "\tCenter: " << ((rows / 2) - (mapH / 2)) << endl;
+	//attack(false);
 	if (Attacked)
 	{
-		Attack(false);
+		attack(false);
 	}
 
 }
@@ -336,17 +400,17 @@ void changeColor(WORD colorSelected, int poxY, int posX)
 	WriteConsoleOutputAttribute(GetStdHandle(STD_OUTPUT_HANDLE), &write, 1, c, &written);
 }
 
-int KeyCheck()
-{
-	int getKey = _getch();
-	if (getKey == 0 || getKey == 224)
-	{
-		getKey = _getch();
-	}
-	return getKey;
-}
+//int keyCheck()
+//{
+//	int getKey = _getch();
+//	if (getKey == 0 || getKey == 224)
+//	{
+//		getKey = _getch();
+//	}
+//	return getKey;
+//}
 
-void SpwanPlayer()
+bool spwanPlayer()
 {
 	int x;
 	int y;
@@ -360,71 +424,23 @@ void SpwanPlayer()
 				character[0] = i;
 				character[1] = j;
 				position[character[0]][character[1]] = MAP_CHARACTER;
-				return;
+				return true;
 			}
 		}
 	}
 
 	system("cls");
-	wcout << endl << endl;
-	wcout << "\tno Spawn Point found!" << endl;
+	cout << endl << endl;
+	cout << "\tno Spawn Point found!" << endl;
 	system("pause");
+	return false;
 }
 
-void LoadMap(int fileName)
-{
-	currentLevel++;
-
-	clearBox();
-	FILE * gameMapFile;
-	errno_t err;
-	if (fileName == -1)
-	{
-		if (currentLevel >= MAX_LEVEL)
-		{
-			currentLevel = 0;
-		}
-		fileName = currentLevel;
-	}
-	err = fopen_s(&gameMapFile, mapFileName[fileName], "r, ccs=UNICODE");
-	if (err == 0)
-	{
-		mapH = (fgetwc(gameMapFile) & 0xf) * (fgetwc(gameMapFile) & 0xf);
-		mapW = (fgetwc(gameMapFile) & 0xf) * (fgetwc(gameMapFile) & 0xf);
-		fgetwc(gameMapFile);
-
-		for (int i = 0; i < mapH; i++)
-		{
-			for (int j = 0; j < mapW; j++)
-			{
-				position[i][j] = fgetwc(gameMapFile);
-				if (position[i][j] == '\n')
-				{
-					position[i][j] = fgetwc(gameMapFile);
-				}
-				if (position[i][j] == MAP_KEY)
-				{
-					keyPosition[i][j] = true;
-					position[i][j] = MAP_CHEST;
-				}
-			}
-		}
-
-		fclose(gameMapFile);
-	}
-	else
-	{
-		cout << "Unable to open file!" << endl;
-		system("pause");
-	}
-	//SetWindowPos(GetConsoleWindow(), 0, 0, 0, mapW*25, (mapH+2)*25, SWP_SHOWWINDOW | SWP_NOMOVE);
-}
-
-void MoveCharacter(int y, int x)
+bool moveCharacter(int y, int x)
 {
 	if (currentFrameTime <= characterNextMove)
 	{
-		return;
+		return true;
 	}
 	characterNextMove = currentFrameTime + characterSpeed;
 
@@ -432,7 +448,7 @@ void MoveCharacter(int y, int x)
 	switch (futurePosition)
 	{
 	case MAP_FLOOR:
-		DetectOldPosition();
+		detectOldPosition();
 		character[0] += x;
 		character[1] += y;
 		position[character[0]][character[1]] = MAP_CHARACTER;
@@ -443,11 +459,11 @@ void MoveCharacter(int y, int x)
 		character[1] += y;
 		position[character[0]][character[1]] = MAP_CHARACTER;
 		gatheredItem++;*/
-		Attack(true);
+		attack(true);
 		break;
 	case MAP_KEY:
-		Attack(true);
-		DetectOldPosition();
+		attack(true);
+		detectOldPosition();
 		character[0] += x;
 		character[1] += y;
 		position[character[0]][character[1]] = MAP_CHARACTER;
@@ -455,7 +471,7 @@ void MoveCharacter(int y, int x)
 	case MAP_LOCKED_DOOR:
 		if (keysGathered > 0)
 		{
-			DetectOldPosition();
+			detectOldPosition();
 			character[0] += x;
 			character[1] += y;
 			position[character[0]][character[1]] = MAP_CHARACTER;
@@ -463,27 +479,30 @@ void MoveCharacter(int y, int x)
 		}
 		break;
 	case MAP_PICKUP:
-		DetectOldPosition();
+		detectOldPosition();
 		character[0] += x;
 		character[1] += y;
 		position[character[0]][character[1]] = MAP_CHARACTER;
 		gatheredItem++;
 		break;
 	case MAP_PORTAL1:
-		LoadMap(E1M1);
-		SpwanPlayer();
+		loadMap(E1M1);
+		spwanPlayer();
 		break;
 	case MAP_PORTAL2:
-		LoadMap(E1M2);
-		SpwanPlayer();
+		loadMap(E1M2);
+		spwanPlayer();
 		break;
 	case MAP_PORTAL3:
-		LoadMap(E1M3);
-		SpwanPlayer();
+		loadMap(E1M3);
+		spwanPlayer();
 		break;
 	case MAP_PORTALNEXT:	
-		LoadMap(NEXTLEVEL);
-		SpwanPlayer();
+		currentLevel++;
+		if (!loadMap(NEXTLEVEL))
+		{
+			return false;
+		}
 		break;
 	case MAP_CEILING:
 	case MAP_CEILING_TOP_END: 
@@ -499,9 +518,10 @@ void MoveCharacter(int y, int x)
 	default:
 		break;
 	}
+	return true;
 }
 
-void DetectOldPosition()
+void detectOldPosition()
 {
 	if (position[character[0]][character[1]] != MAP_CEILING &&
 		position[character[0]][character[1]] != MAP_CEILING_TOP_END &&
@@ -511,7 +531,7 @@ void DetectOldPosition()
 	}
 }
 
-void HitCollision(bool sword,int dirX,int dirY, wchar_t swordDir)
+void hitCollision(bool sword,int dirX,int dirY, wchar_t swordDir)
 {
 	if (sword)
 	{
@@ -536,6 +556,11 @@ void HitCollision(bool sword,int dirX,int dirY, wchar_t swordDir)
 			position[character[0] + dirX][character[1] + dirY] = MAP_FLOOR;
 			keysGathered++;
 		}
+		else if (position[character[0] + dirX][character[1] + dirY] == MAP_PICKUP)
+		{
+			position[character[0] + dirX][character[1] + dirY] = MAP_FLOOR;
+			gatheredItem++;
+		}
 	}
 	else
 	{
@@ -543,28 +568,62 @@ void HitCollision(bool sword,int dirX,int dirY, wchar_t swordDir)
 		Attacked = false;
 	}
 }
-void Attack(bool sword)
+
+void attack(bool sword)
 {
 	switch (lastDirPress)
 	{
 	case UP:
-		HitCollision(sword, -1, 0, SWORD_UP);
+		hitCollision(sword, -1, 0, SWORD_UP);
 		break;
 	case DOWN:
-		HitCollision(sword, +1, 0, SWORD_DOWN);
+		hitCollision(sword, +1, 0, SWORD_DOWN);
 		break;
 	case LEFT:
-		HitCollision(sword, 0, -1, SWORD_LEFT);
+		hitCollision(sword, 0, -1, SWORD_LEFT);
 		break;
 	case RIGHT:
-		HitCollision(sword, 0, +1, SWORD_RIGHT);
+		hitCollision(sword, 0, +1, SWORD_RIGHT);
 		break;
 	default:
 		break;
 	}
 }
 
-void ShowConsoleCursor(bool showFlag)
+void action()
+{
+	switch (lastDirPress)
+	{
+	case UP:
+		if (messagePosition[character[0] - 1][character[1]] != 0 )
+		{
+			displayMessage(mapMessages[(messagePosition[character[0] - 1][character[1]])- 1]);
+		}
+		break;
+	case DOWN:
+		if (messagePosition[character[0] + 1][character[1]] != 0)
+		{
+			displayMessage(mapMessages[(messagePosition[character[0] + 1][character[1]]) - 1]);
+		}
+		break;
+	case LEFT:
+		if (messagePosition[character[0]][character[1]- 1] != 0)
+		{
+			displayMessage(mapMessages[(messagePosition[character[0]][character[1] - 1]) - 1]);
+		}
+		break;
+	case RIGHT:
+		if (messagePosition[character[0]][character[1] + 1] != 0)
+		{
+			displayMessage(mapMessages[(messagePosition[character[0]][character[1] + 1]) - 1]);
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+void showConsoleCursor(bool showFlag)
 {
 	HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
 
@@ -575,3 +634,248 @@ void ShowConsoleCursor(bool showFlag)
 	SetConsoleCursorInfo(out, &cursorInfo);
 }
 
+void displayMessage(string message)
+{
+	int messageLenght = message.length();
+
+	//clearScreen();
+	HANDLE hOut;
+	COORD screenPosition;
+	DWORD Written;
+	hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+
+	int locX, locY;
+	for (int i = 0; i < 3; i++)
+	{
+		for (int j = 0; j < messageLenght; j++)
+		{
+			locX = j + ((columns / 2) - (messageLenght / 2)) + 1;
+			locY = i + (rows / 2);	
+			screenPosition.X = locX;
+			screenPosition.Y = locY;
+			if (i == 1)
+			{
+				FillConsoleOutputCharacter(hOut, message[j], 1, screenPosition, &Written);
+				changeColor(15, locY, locX);
+			}
+
+			if (i == 0 || i == 2)
+			{
+				FillConsoleOutputCharacter(hOut, MAP_FLOOR, 1, screenPosition, &Written);
+				changeColor(15, locY, locX);
+
+			}
+			
+			if (j == 0 )
+			{
+				screenPosition.X -= 1;
+				FillConsoleOutputCharacter(hOut, MAP_FLOOR, 1, screenPosition, &Written);
+				changeColor(15, locY, locX-1);
+			}
+			else if (j == messageLenght - 1)
+			{
+				screenPosition.X += 1;
+				FillConsoleOutputCharacter(hOut, MAP_FLOOR, 1, screenPosition, &Written);
+				changeColor(15, locY, locX+1);
+
+			}
+		}
+	}
+	system("pause");
+	system("cls");
+}
+
+bool loadGameInfo(string gameInfoTextFile)
+{
+	string line;
+	ifstream gameListFile(gameInfoTextFile);
+	if (gameListFile.is_open())
+	{
+		getline(gameListFile, line);
+		gameMaxLevel = stoi(line);
+
+		for (int i = 0; i < gameMaxLevel; i++)
+		{
+			getline(gameListFile, line); // mapFileName[ENGINE_MAX_LEVEL] , mapFileNameText[ENGINE_MAX_LEVEL]
+			mapFileName[i] = line;
+		}
+
+		int lineNumber = 0;
+		while (getline(gameListFile, line))
+		{
+			mapFileNameText[lineNumber++] = line;
+		}
+
+		//for (int i = 0; i < gameMaxLevel; i++)
+		//{
+		//	getline(gameListFile, line); // mapFileName[ENGINE_MAX_LEVEL] , mapFileNameText[ENGINE_MAX_LEVEL]
+		//	mapFileNameText[i] = line;
+		//}
+		gameListFile.close();
+	}
+	else
+	{
+		cout << "Missing " << gameInfoTextFile << " to load game." << endl;
+		system("pause");
+		return 0;
+	}
+
+	return true;
+}
+
+bool loadMap(int fileName)
+{	
+	system("cls");
+	FILE * gameMapFile;
+	errno_t err;
+	if (fileName == -1)
+	{
+		if (currentLevel >= gameMaxLevel)
+		{
+			currentLevel = 0;
+		}
+		fileName = currentLevel;
+	}
+	int qtyOfMessage = loadMapText();
+	clearBox();
+	// Open map file to load
+	err = fopen_s(&gameMapFile, mapFileName[fileName].c_str(), "r, ccs=UNICODE");
+	if (err == 0)
+	{
+		mapH = (fgetwc(gameMapFile) & 0xf) * (fgetwc(gameMapFile) & 0xf);
+		mapW = (fgetwc(gameMapFile) & 0xf) * (fgetwc(gameMapFile) & 0xf);
+		fgetwc(gameMapFile);
+
+		for (int i = 0; i < mapH; i++)
+		{
+			for (int j = 0; j < mapW; j++)
+			{
+				position[i][j] = fgetwc(gameMapFile);
+				if (position[i][j] == '\n')
+				{
+					position[i][j] = fgetwc(gameMapFile);
+				}
+
+				if (position[i][j] == MAP_KEY)
+				{
+					keyPosition[i][j] = true;
+					position[i][j] = MAP_CHEST;
+				}
+
+				if (qtyOfMessage != 0)
+				{
+					if (position[i][j] == TEXT_ZERO)
+					{
+						position[i][j] = mapMessageChar[0];
+						messagePosition[i][j] = 1;
+					}
+					else if (position[i][j] == TEXT_ONE)
+					{
+						position[i][j] = mapMessageChar[1];
+						messagePosition[i][j] = 2;
+					}
+					else if (position[i][j] == TEXT_TWO)
+					{
+						position[i][j] = mapMessageChar[2];
+						messagePosition[i][j] = 3;
+					}
+					else if (position[i][j] == TEXT_THREE)
+					{
+						position[i][j] = mapMessageChar[3];
+						messagePosition[i][j] = 4;
+					}
+					else if (position[i][j] == TEXT_FOUR)
+					{
+						position[i][j] = mapMessageChar[4];
+						messagePosition[i][j] = 5;
+					}
+					else if (position[i][j] == TEXT_FIVE)
+					{
+						position[i][j] = mapMessageChar[5];
+						messagePosition[i][j] = 6;
+					}
+					else if (position[i][j] == TEXT_SIX)
+					{
+						position[i][j] = mapMessageChar[6];
+						messagePosition[i][j] = 7;
+					}
+					else if (position[i][j] == TEXT_SEVEN)
+					{
+						position[i][j] = mapMessageChar[7];
+						messagePosition[i][j] = 8;
+					}
+					else if (position[i][j] == TEXT_EIGHT)
+					{
+						position[i][j] = mapMessageChar[8];
+						messagePosition[i][j] = 9;
+					}
+					else if (position[i][j] == TEXT_NINE)
+					{
+						position[i][j] = mapMessageChar[9];
+						messagePosition[i][j] = 10;
+					}
+				}
+
+			}
+		}
+
+		fclose(gameMapFile);
+		if (!spwanPlayer())
+		{
+			return false;
+		}
+	}
+	else
+	{
+		cout << "Unable to open " << (mapFileName[fileName] !=""? mapFileName[fileName]:"next level") << " file!" << endl;
+		system("pause");
+		return false;
+	}
+	return true;
+	//SetWindowPos(GetConsoleWindow(), 0, 0, 0, mapW*25, (mapH+2)*25, SWP_SHOWWINDOW | SWP_NOMOVE);
+}
+
+int loadMapText()
+{
+	// Reset map Text variable
+	for (int i = 0; i < 10; i++)
+	{
+		mapMessages[i] = "";
+		mapMessageChar[i] = ' ';
+	}
+	for (int i = 0; i < HEIGHT; i++)
+	{
+		for (int j = 0; j < WIDTH; j++)
+		{
+			messagePosition[i][j] = 0;
+		}
+	}
+
+	int qtyOfMessage;
+	string line;
+	ifstream gameListFile(mapFileNameText[currentLevel]);
+
+	if (gameListFile.is_open())
+	{
+		getline(gameListFile, line);
+		qtyOfMessage = stoi(line);
+
+		for (int i = 0; i < qtyOfMessage; i++)
+		{
+			getline(gameListFile, line);
+			mapMessageChar[i] = stoi(line, nullptr, 16);
+			getline(gameListFile, line);
+			mapMessages[i] = line;
+		}
+		gameListFile.close();
+	}
+	else
+	{
+		cout << "Unable to open " << (mapFileNameText[currentLevel] != "" ? mapFileNameText[currentLevel] : "next level message") << " file!" << endl;
+		system("pause");
+		return 0;
+	}
+
+	
+	return qtyOfMessage;
+}

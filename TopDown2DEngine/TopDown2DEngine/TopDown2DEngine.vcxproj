@@ -143,9 +143,13 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="Characters.txt" />
+    <Text Include="GameInfo.txt" />
+    <Text Include="gameMapE1M0.txt" />
     <Text Include="gameMapE1M1.txt" />
     <Text Include="gameMapE1M2.txt" />
     <Text Include="gameMapE1M3.txt" />
+    <Text Include="gameTextE1M0.txt" />
+    <Text Include="gameTextE1M1.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
