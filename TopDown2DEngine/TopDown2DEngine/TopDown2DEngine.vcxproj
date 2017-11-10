@@ -148,6 +148,7 @@
     <Text Include="gameMapE1M1.txt" />
     <Text Include="gameMapE1M2.txt" />
     <Text Include="gameMapE1M3.txt" />
+    <Text Include="gameMapE1M4.txt" />
     <Text Include="gameTextE1M0.txt" />
     <Text Include="gameTextE1M1.txt" />
   </ItemGroup>

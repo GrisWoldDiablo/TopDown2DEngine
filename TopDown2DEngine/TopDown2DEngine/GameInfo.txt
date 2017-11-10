@@ -1,7 +1,8 @@
-4
+5
 gameMapE1M0.txt
 gameMapE1M1.txt
 gameMapE1M2.txt
 gameMapE1M3.txt
+gameMapE1M4.txt
 gameTextE1M0.txt
 gameTextE1M1.txt

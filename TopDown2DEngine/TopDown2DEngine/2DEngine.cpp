@@ -23,7 +23,8 @@ using namespace std::chrono;
 enum vkKeyCode {
 	VKKEY_UP = VK_UP, VKKEY_DOWN = VK_DOWN, VKKEY_LEFT = VK_LEFT, VKKEY_RIGHT = VK_RIGHT,
 	VKKEY_W = 0x57, VKKEY_S = 0x53, VKKEY_A = 0x41, VKKEY_D = 0x44, VKKEY_E = 0x45,
-	VKKEY_SPACE = VK_SPACE, VKKEY_F = 102, VKKEY_ESC = VK_ESCAPE
+	VKKEY_SPACE = VK_SPACE, VKKEY_F = 102, VKKEY_ESC = VK_ESCAPE, VKKEY_R = 0x52, 
+	VKKEY_SHIFT = VK_SHIFT,
 };
 
 enum dirPress { UP , DOWN, LEFT, RIGHT };
@@ -44,6 +45,7 @@ enum mapObject {
 	MAP_LOCKED_DOOR = 0x25AC,	// 0x25AC = ▬
 	MAP_WATER = 0x2592,			// 0x2592 = ▒
 	MAP_DIRT = 0x2591,			// 0x2591 = ░
+	MAP_TREE = 0x2593			// 0x2593 = ▓
 };
 
 enum mapCeiling {
@@ -73,7 +75,8 @@ const int HEIGHT = 100;
 const int ENGINE_MAX_LEVEL = 100;
 int mapH, mapW, gatheredItem = 0, keysGathered = 0, currentLevel = 0;
 wchar_t position[HEIGHT][WIDTH] = { {},{} };
-
+wchar_t characterGround = MAP_FLOOR;
+wchar_t futurePosition;
 
 
 long characterSpeed = 50;
@@ -233,9 +236,17 @@ bool vKControl()
 		}
 	}
 
+	if (GetAsyncKeyState(VKKEY_R))
+	{
+		if (!loadMap(NEXTLEVEL))
+		{
+			return false;
+		}
+	}
+
 	
 
-	if (GetAsyncKeyState(VK_SHIFT))
+	if (GetAsyncKeyState(VKKEY_SHIFT))
 	{
 		characterSpeed = 50;
 	}
@@ -345,6 +356,9 @@ void drawScreen()
 			case MAP_DIRT:
 				changeColor(4, locY, locX);
 				break;
+			case MAP_TREE:
+				changeColor(6, locY, locX);
+				break;
 			default:
 				changeColor(143, locY, locX);
 				break;
@@ -412,8 +426,6 @@ void changeColor(WORD colorSelected, int poxY, int posX)
 
 bool spwanPlayer()
 {
-	int x;
-	int y;
 
 	for (int i = 0; i < mapH; i++)
 	{
@@ -444,10 +456,16 @@ bool moveCharacter(int y, int x)
 	}
 	characterNextMove = currentFrameTime + characterSpeed;
 
-	wchar_t futurePosition = position[character[0] + x][character[1] + y];
+	futurePosition = position[character[0] + x][character[1] + y];
 	switch (futurePosition)
 	{
 	case MAP_FLOOR:
+		detectOldPosition();
+		character[0] += x;
+		character[1] += y;
+		position[character[0]][character[1]] = MAP_CHARACTER;
+		break;
+	case MAP_DIRT:
 		detectOldPosition();
 		character[0] += x;
 		character[1] += y;
@@ -477,6 +495,10 @@ bool moveCharacter(int y, int x)
 			position[character[0]][character[1]] = MAP_CHARACTER;
 			keysGathered--;
 		}
+		else
+		{
+			displayMessage("Door is Locked");
+		}
 		break;
 	case MAP_PICKUP:
 		detectOldPosition();
@@ -497,7 +519,8 @@ bool moveCharacter(int y, int x)
 		loadMap(E1M3);
 		spwanPlayer();
 		break;
-	case MAP_PORTALNEXT:	
+	case MAP_PORTALNEXT:
+		displayMessage("Leaving Level!");
 		currentLevel++;
 		if (!loadMap(NEXTLEVEL))
 		{
@@ -507,6 +530,8 @@ bool moveCharacter(int y, int x)
 	case MAP_CEILING:
 	case MAP_CEILING_TOP_END: 
 	case MAP_CEILING_BOTTOM_END:
+		detectOldPosition();
+		
 		if (position[character[0]][character[1]] == MAP_CHARACTER)
 		{
 			position[character[0]][character[1]] = MAP_FLOOR;
@@ -518,17 +543,25 @@ bool moveCharacter(int y, int x)
 	default:
 		break;
 	}
+	
 	return true;
 }
 
 void detectOldPosition()
 {
+	
 	if (position[character[0]][character[1]] != MAP_CEILING &&
 		position[character[0]][character[1]] != MAP_CEILING_TOP_END &&
-		position[character[0]][character[1]] != MAP_CEILING_BOTTOM_END)
+		position[character[0]][character[1]] != MAP_CEILING_BOTTOM_END &&
+		characterGround != MAP_DIRT)
 	{
 		position[character[0]][character[1]] = MAP_FLOOR;
 	}
+	else if (characterGround == MAP_DIRT)
+	{
+		position[character[0]][character[1]] = MAP_DIRT;
+	}
+	characterGround = futurePosition;
 }
 
 void hitCollision(bool sword,int dirX,int dirY, wchar_t swordDir)
@@ -555,6 +588,7 @@ void hitCollision(bool sword,int dirX,int dirY, wchar_t swordDir)
 		{
 			position[character[0] + dirX][character[1] + dirY] = MAP_FLOOR;
 			keysGathered++;
+			displayMessage("Found a Key!");
 		}
 		else if (position[character[0] + dirX][character[1] + dirY] == MAP_PICKUP)
 		{
@@ -669,8 +703,25 @@ void displayMessage(string message)
 			if (j == 0 )
 			{
 				screenPosition.X -= 1;
-				FillConsoleOutputCharacter(hOut, MAP_FLOOR, 1, screenPosition, &Written);
-				changeColor(15, locY, locX-1);
+				if (i == 0)
+				{
+					
+					FillConsoleOutputCharacter(hOut, futurePosition, 1, screenPosition, &Written);
+					changeColor(15, screenPosition.Y, screenPosition.X);
+					screenPosition.X += 1;
+					FillConsoleOutputCharacter(hOut, ':', 1, screenPosition, &Written);
+					//changeColor(15, locY, locX - 1);
+					screenPosition.X -= 1;
+
+
+				}
+				else
+				{
+					FillConsoleOutputCharacter(hOut, MAP_FLOOR, 1, screenPosition, &Written);
+					changeColor(15, locY, locX - 1);
+				}
+
+				
 			}
 			else if (j == messageLenght - 1)
 			{
@@ -725,6 +776,7 @@ bool loadGameInfo(string gameInfoTextFile)
 
 bool loadMap(int fileName)
 {	
+	keysGathered = 0;
 	system("cls");
 	FILE * gameMapFile;
 	errno_t err;
