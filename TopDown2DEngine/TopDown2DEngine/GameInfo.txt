@@ -6,3 +6,6 @@ gameMapE1M3.txt
 gameMapE1M4.txt
 gameTextE1M0.txt
 gameTextE1M1.txt
+gameTextE1M2.txt
+gameTextE1M3.txt
+gameTextE1M4.txt

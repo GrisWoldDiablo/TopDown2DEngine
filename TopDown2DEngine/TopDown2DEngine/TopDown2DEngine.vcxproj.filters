@@ -47,5 +47,8 @@
     <Text Include="gameMapE1M4.txt">
       <Filter>Resource Files</Filter>
     </Text>
+    <Text Include="gameTextE1M3.txt">
+      <Filter>Resource Files</Filter>
+    </Text>
   </ItemGroup>
 </Project>

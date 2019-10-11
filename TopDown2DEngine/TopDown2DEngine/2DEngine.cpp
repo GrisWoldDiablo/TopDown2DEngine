@@ -132,9 +132,9 @@ void main()
 	// Font Size
 	cfi.cbSize = sizeof(cfi);
 	cfi.dwFontSize.X = 0;
-	cfi.dwFontSize.Y = 28;
+	cfi.dwFontSize.Y = 50;
 	//lstrcpyW(cfi.FaceName, L"Lucida Console");
-	lstrcpyW(cfi.FaceName, L"Consolas");
+	//lstrcpyW(cfi.FaceName, L"Consolas");
 	SetCurrentConsoleFontEx(GetStdHandle(STD_OUTPUT_HANDLE), FALSE, &cfi);
 	GetCurrentConsoleFontEx(GetStdHandle(STD_OUTPUT_HANDLE), FALSE, &test);
 	test.FaceName;
@@ -396,8 +396,8 @@ void drawScreen()
 	}
 	cout << "Level: " << currentLevel << endl;
 	cout << "Gather: " << gatheredItem << "\tKey(s): " << keysGathered << endl;
-	cout << "Colums: " << columns << "\tCenter: " << ((columns / 2) + (mapW / 2)) + 1 << endl;
-	cout << "Rows: " << rows << "\tCenter: " << ((rows / 2) - (mapH / 2)) << endl;
+	//cout << "Colums: " << columns << "\tCenter: " << ((columns / 2) + (mapW / 2)) + 1 << endl;
+	//cout << "Rows: " << rows << "\tCenter: " << ((rows / 2) - (mapH / 2)) << endl;
 	//attack(false);
 	if (Attacked)
 	{
@@ -889,6 +889,7 @@ bool loadMap(int fileName)
 
 int loadMapText()
 {
+	characterGround = MAP_FLOOR;
 	// Reset map Text variable
 	for (int i = 0; i < 10; i++)
 	{
